@@ -1,8 +1,6 @@
 ﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
-#nullable disable
-
 using System;
 using osu.Framework.Allocation;
 using osu.Framework.Extensions;
@@ -27,8 +25,7 @@ namespace osu.Game.Users.Drawables
         [BackgroundDependencyLoader]
         private void load(TextureStore ts)
         {
-            if (ts == null)
-                throw new ArgumentNullException(nameof(ts));
+            ArgumentNullException.ThrowIfNull(ts);
 
             string textureName = countryCode == CountryCode.Unknown ? "__" : countryCode.ToString();
             Texture = ts.Get($@"Flags/{textureName}") ?? ts.Get(@"Flags/__");

@@ -9,6 +9,7 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Input;
 using osu.Framework.Input.Bindings;
@@ -134,9 +135,13 @@ namespace osu.Game.Overlays
                                     },
                                     Children = new Drawable[]
                                     {
-                                        currentChannelContainer = new Container<DrawableChannel>
+                                        new PopoverContainer
                                         {
                                             RelativeSizeAxes = Axes.Both,
+                                            Child = currentChannelContainer = new Container<DrawableChannel>
+                                            {
+                                                RelativeSizeAxes = Axes.Both,
+                                            }
                                         },
                                         loading = new LoadingLayer(true),
                                         channelListing = new ChannelListing
@@ -271,8 +276,6 @@ namespace osu.Game.Overlays
 
         protected override void PopIn()
         {
-            base.PopIn();
-
             this.MoveToY(0, transition_length, Easing.OutQuint);
             this.FadeIn(transition_length, Easing.OutQuint);
         }
@@ -315,10 +318,10 @@ namespace osu.Game.Overlays
                 channelListing.Hide();
                 textBar.ShowSearch.Value = false;
 
-                if (loadedChannels.ContainsKey(newChannel))
+                if (loadedChannels.TryGetValue(newChannel, out var loadedChannel))
                 {
                     currentChannelContainer.Clear(false);
-                    currentChannelContainer.Add(loadedChannels[newChannel]);
+                    currentChannelContainer.Add(loadedChannel);
                 }
                 else
                 {
@@ -352,11 +355,13 @@ namespace osu.Game.Overlays
 
         protected virtual DrawableChannel CreateDrawableChannel(Channel newChannel) => new DrawableChannel(newChannel);
 
-        private void joinedChannelsChanged(object sender, NotifyCollectionChangedEventArgs args)
+        private void joinedChannelsChanged(object? sender, NotifyCollectionChangedEventArgs args)
         {
             switch (args.Action)
             {
                 case NotifyCollectionChangedAction.Add:
+                    Debug.Assert(args.NewItems != null);
+
                     IEnumerable<Channel> newChannels = args.NewItems.OfType<Channel>().Where(isChatChannel);
 
                     foreach (var channel in newChannels)
@@ -365,6 +370,8 @@ namespace osu.Game.Overlays
                     break;
 
                 case NotifyCollectionChangedAction.Remove:
+                    Debug.Assert(args.OldItems != null);
+
                     IEnumerable<Channel> leftChannels = args.OldItems.OfType<Channel>().Where(isChatChannel);
 
                     foreach (var channel in leftChannels)
@@ -384,7 +391,7 @@ namespace osu.Game.Overlays
             }
         }
 
-        private void availableChannelsChanged(object sender, NotifyCollectionChangedEventArgs args)
+        private void availableChannelsChanged(object? sender, NotifyCollectionChangedEventArgs args)
             => channelListing.UpdateAvailableChannels(channelManager.AvailableChannels);
 
         private void handleChatMessage(string message)

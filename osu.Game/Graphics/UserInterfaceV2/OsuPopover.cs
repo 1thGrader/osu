@@ -1,10 +1,8 @@
-// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
-#nullable disable
-
-using JetBrains.Annotations;
 using osu.Framework.Allocation;
+using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Effects;
@@ -14,6 +12,7 @@ using osu.Framework.Input.Events;
 using osu.Game.Input.Bindings;
 using osu.Game.Overlays;
 using osuTK;
+using osuTK.Input;
 
 namespace osu.Game.Graphics.UserInterfaceV2
 {
@@ -39,7 +38,7 @@ namespace osu.Game.Graphics.UserInterfaceV2
         }
 
         [BackgroundDependencyLoader(true)]
-        private void load([CanBeNull] OverlayColourProvider colourProvider, OsuColour colours)
+        private void load(OverlayColourProvider? colourProvider, OsuColour colours)
         {
             Background.Colour = Arrow.Colour = colourProvider?.Background4 ?? colours.GreySeaFoamDarker;
         }
@@ -58,6 +57,14 @@ namespace osu.Game.Graphics.UserInterfaceV2
             this.FadeOut(fade_duration, Easing.OutQuint);
         }
 
+        protected override bool OnKeyDown(KeyDownEvent e)
+        {
+            if (e.Key == Key.Escape)
+                return false; // disable the framework-level handling of escape key for conformity (we use GlobalAction.Back).
+
+            return base.OnKeyDown(e);
+        }
+
         public bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
         {
             if (e.Repeat)
@@ -68,7 +75,7 @@ namespace osu.Game.Graphics.UserInterfaceV2
 
             if (e.Action == GlobalAction.Back)
             {
-                Hide();
+                this.HidePopover();
                 return true;
             }
 

@@ -9,13 +9,16 @@ using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using osu.Framework.Allocation;
+using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Textures;
 using osu.Framework.Input;
 using osu.Framework.IO.Stores;
 using osu.Framework.Logging;
 using osu.Framework.Platform;
+using osu.Game.Database;
 using osu.Game.Graphics;
+using osu.Game.Online;
 using osu.Game.Online.API.Requests;
 using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Tournament.IO;
@@ -34,6 +37,7 @@ namespace osu.Game.Tournament
         private TournamentStorage storage;
         private DependencyContainer dependencies;
         private FileBasedIPC ipc;
+        private BeatmapLookupCache beatmapCache;
 
         protected Task BracketLoadTask => bracketLoadTaskCompletionSource.Task;
 
@@ -44,12 +48,20 @@ namespace osu.Game.Tournament
             return dependencies = new DependencyContainer(base.CreateChildDependencies(parent));
         }
 
+        public override EndpointConfiguration CreateEndpoints()
+        {
+            if (UseDevelopmentServer)
+                return base.CreateEndpoints();
+
+            return new ProductionEndpointConfiguration();
+        }
+
         private TournamentSpriteText initialisationText;
 
         [BackgroundDependencyLoader]
         private void load(Storage baseStorage)
         {
-            AddInternal(initialisationText = new TournamentSpriteText
+            Add(initialisationText = new TournamentSpriteText
             {
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,
@@ -66,6 +78,8 @@ namespace osu.Game.Tournament
             Textures.AddTextureSource(new TextureLoaderStore(new StorageBackedResourceStore(storage)));
 
             dependencies.CacheAs(new StableInfo(storage));
+
+            beatmapCache = dependencies.Get<BeatmapLookupCache>();
         }
 
         protected override void LoadComplete()
@@ -156,9 +170,21 @@ namespace osu.Game.Tournament
                 addedInfo |= addSeedingBeatmaps();
 
                 if (addedInfo)
-                    SaveChanges();
+                    saveChanges();
 
                 ladder.CurrentMatch.Value = ladder.Matches.FirstOrDefault(p => p.Current.Value);
+
+                ladder.Ruleset.BindValueChanged(r =>
+                {
+                    // Refetch player rank data on next startup as the ruleset has changed.
+                    foreach (var team in ladder.Teams)
+                    {
+                        foreach (var player in team.Players)
+                            player.Rank = null;
+                    }
+
+                    SaveChanges();
+                });
             }
             catch (Exception e)
             {
@@ -220,9 +246,7 @@ namespace osu.Game.Tournament
             {
                 var b = beatmapsRequiringPopulation[i];
 
-                var req = new GetBeatmapRequest(new APIBeatmap { OnlineID = b.ID });
-                API.Perform(req);
-                b.Beatmap = new TournamentBeatmap(req.Response ?? new APIBeatmap());
+                b.Beatmap = new TournamentBeatmap(beatmapCache.GetBeatmapAsync(b.ID).GetResultSafely() ?? new APIBeatmap());
 
                 updateLoadProgressMessage($"Populating round beatmaps ({i} / {beatmapsRequiringPopulation.Count})");
             }
@@ -247,9 +271,7 @@ namespace osu.Game.Tournament
             {
                 var b = beatmapsRequiringPopulation[i];
 
-                var req = new GetBeatmapRequest(new APIBeatmap { OnlineID = b.ID });
-                API.Perform(req);
-                b.Beatmap = new TournamentBeatmap(req.Response ?? new APIBeatmap());
+                b.Beatmap = new TournamentBeatmap(beatmapCache.GetBeatmapAsync(b.ID).GetResultSafely() ?? new APIBeatmap());
 
                 updateLoadProgressMessage($"Populating seeding beatmaps ({i} / {beatmapsRequiringPopulation.Count})");
             }
@@ -306,13 +328,11 @@ namespace osu.Game.Tournament
                 return;
             }
 
-            foreach (var r in ladder.Rounds)
-                r.Matches = ladder.Matches.Where(p => p.Round.Value == r).Select(p => p.ID).ToList();
+            saveChanges();
+        }
 
-            ladder.Progressions = ladder.Matches.Where(p => p.Progression.Value != null).Select(p => new TournamentProgression(p.ID, p.Progression.Value.ID)).Concat(
-                                            ladder.Matches.Where(p => p.LosersProgression.Value != null).Select(p => new TournamentProgression(p.ID, p.LosersProgression.Value.ID, true)))
-                                        .ToList();
-
+        private void saveChanges()
+        {
             // Serialise before opening stream for writing, so if there's a failure it will leave the file in the previous state.
             string serialisedLadder = GetSerialisedLadder();
 
@@ -323,6 +343,13 @@ namespace osu.Game.Tournament
 
         public string GetSerialisedLadder()
         {
+            foreach (var r in ladder.Rounds)
+                r.Matches = ladder.Matches.Where(p => p.Round.Value == r).Select(p => p.ID).ToList();
+
+            ladder.Progressions = ladder.Matches.Where(p => p.Progression.Value != null).Select(p => new TournamentProgression(p.ID, p.Progression.Value.ID)).Concat(
+                                            ladder.Matches.Where(p => p.LosersProgression.Value != null).Select(p => new TournamentProgression(p.ID, p.LosersProgression.Value.ID, true)))
+                                        .ToList();
+
             return JsonConvert.SerializeObject(ladder,
                 new JsonSerializerSettings
                 {

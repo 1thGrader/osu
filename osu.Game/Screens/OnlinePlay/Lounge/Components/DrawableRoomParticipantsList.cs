@@ -4,6 +4,7 @@
 #nullable disable
 
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
@@ -23,7 +24,13 @@ namespace osu.Game.Screens.OnlinePlay.Lounge.Components
 {
     public partial class DrawableRoomParticipantsList : OnlinePlayComposite
     {
+        public const float SHEAR_WIDTH = 12f;
+
         private const float avatar_size = 36;
+
+        private const float height = 60f;
+
+        private static readonly Vector2 shear = new Vector2(SHEAR_WIDTH / height, 0);
 
         private FillFlowContainer<CircularAvatar> avatarFlow;
 
@@ -35,7 +42,7 @@ namespace osu.Game.Screens.OnlinePlay.Lounge.Components
         public DrawableRoomParticipantsList()
         {
             AutoSizeAxes = Axes.X;
-            Height = 60;
+            Height = height;
         }
 
         [BackgroundDependencyLoader]
@@ -48,7 +55,7 @@ namespace osu.Game.Screens.OnlinePlay.Lounge.Components
                     RelativeSizeAxes = Axes.Both,
                     Masking = true,
                     CornerRadius = 10,
-                    Shear = new Vector2(0.2f, 0),
+                    Shear = shear,
                     Child = new Box
                     {
                         RelativeSizeAxes = Axes.Both,
@@ -97,7 +104,7 @@ namespace osu.Game.Screens.OnlinePlay.Lounge.Components
                                     RelativeSizeAxes = Axes.Both,
                                     Masking = true,
                                     CornerRadius = 10,
-                                    Shear = new Vector2(0.2f, 0),
+                                    Shear = shear,
                                     Child = new Box
                                     {
                                         RelativeSizeAxes = Axes.Both,
@@ -197,11 +204,15 @@ namespace osu.Game.Screens.OnlinePlay.Lounge.Components
             switch (e.Action)
             {
                 case NotifyCollectionChangedAction.Add:
+                    Debug.Assert(e.NewItems != null);
+
                     foreach (var added in e.NewItems.OfType<APIUser>())
                         addUser(added);
                     break;
 
                 case NotifyCollectionChangedAction.Remove:
+                    Debug.Assert(e.OldItems != null);
+
                     foreach (var removed in e.OldItems.OfType<APIUser>())
                         removeUser(removed);
                     break;

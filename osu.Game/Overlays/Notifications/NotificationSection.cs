@@ -19,6 +19,11 @@ namespace osu.Game.Overlays.Notifications
 {
     public partial class NotificationSection : AlwaysUpdateFillFlowContainer<Drawable>
     {
+        /// <summary>
+        /// All notifications currently being displayed in this section.
+        /// </summary>
+        public IEnumerable<Notification> Notifications => notifications;
+
         private OsuSpriteText countDrawable = null!;
 
         private FlowContainer<Notification> notifications = null!;
@@ -33,15 +38,15 @@ namespace osu.Game.Overlays.Notifications
 
         public IEnumerable<Type> AcceptedNotificationTypes { get; }
 
-        private readonly string clearButtonText;
+        private readonly LocalisableString clearButtonText;
 
         private readonly LocalisableString titleText;
 
-        public NotificationSection(LocalisableString title, IEnumerable<Type> acceptedNotificationTypes, string clearButtonText)
+        public NotificationSection(LocalisableString title, IEnumerable<Type> acceptedNotificationTypes, LocalisableString clearButtonText)
         {
             AcceptedNotificationTypes = acceptedNotificationTypes.ToArray();
 
-            this.clearButtonText = clearButtonText.ToUpperInvariant();
+            this.clearButtonText = clearButtonText.ToUpper();
             titleText = title;
         }
 

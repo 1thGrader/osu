@@ -13,7 +13,6 @@ using osu.Framework.Graphics.Shapes;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
 using osu.Framework.Threading;
-using osu.Game.Extensions;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
@@ -68,36 +67,30 @@ namespace osu.Game.Overlays.FirstRunSetup
 
         private partial class LanguageSelectionFlow : FillFlowContainer
         {
-            private Bindable<string> frameworkLocale = null!;
-            private IBindable<LocalisationParameters> localisationParameters = null!;
+            private Bindable<Language> language = null!;
 
             private ScheduledDelegate? updateSelectedDelegate;
 
             [BackgroundDependencyLoader]
-            private void load(FrameworkConfigManager frameworkConfig, LocalisationManager localisation)
+            private void load(OsuGameBase game)
             {
                 Direction = FillDirection.Full;
                 Spacing = new Vector2(5);
 
-                ChildrenEnumerable = Enum.GetValues(typeof(Language))
-                                         .Cast<Language>()
+                ChildrenEnumerable = Enum.GetValues<Language>()
                                          .Select(l => new LanguageButton(l)
                                          {
-                                             Action = () => frameworkLocale.Value = l.ToCultureCode()
+                                             Action = () => language.Value = l,
                                          });
 
-                frameworkLocale = frameworkConfig.GetBindable<string>(FrameworkSetting.Locale);
-
-                localisationParameters = localisation.CurrentParameters.GetBoundCopy();
-                localisationParameters.BindValueChanged(p =>
+                language = game.CurrentLanguage.GetBoundCopy();
+                language.BindValueChanged(v =>
                 {
-                    var language = LanguageExtensions.GetLanguageFor(frameworkLocale.Value, p.NewValue);
-
                     // Changing language may cause a short period of blocking the UI thread while the new glyphs are loaded.
                     // Scheduling ensures the button animation plays smoothly after any blocking operation completes.
                     // Note that a delay is required (the alternative would be a double-schedule; delay feels better).
                     updateSelectedDelegate?.Cancel();
-                    updateSelectedDelegate = Scheduler.AddDelayed(() => updateSelectedStates(language), 50);
+                    updateSelectedDelegate = Scheduler.AddDelayed(() => updateSelectedStates(v.NewValue), 50);
                 }, true);
             }
 
@@ -147,7 +140,7 @@ namespace osu.Game.Overlays.FirstRunSetup
                 [BackgroundDependencyLoader]
                 private void load()
                 {
-                    InternalChildren = new Drawable[]
+                    AddRange(new Drawable[]
                     {
                         backgroundBox = new Box
                         {
@@ -162,7 +155,7 @@ namespace osu.Game.Overlays.FirstRunSetup
                             Colour = colourProvider.Light1,
                             Text = Language.GetDescription(),
                         }
-                    };
+                    });
                 }
 
                 protected override void LoadComplete()

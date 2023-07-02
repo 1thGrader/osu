@@ -1,12 +1,14 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
-#nullable disable
-
+using System.Collections.Generic;
 using System.Linq;
+using osu.Framework.Allocation;
 using osu.Framework.Graphics.Containers;
 using osu.Game.Audio;
 using osu.Game.Rulesets.Objects;
+using osu.Game.Rulesets.Scoring;
+using osu.Game.Screens.Play;
 using osu.Game.Skinning;
 
 namespace osu.Game.Rulesets.UI
@@ -27,6 +29,11 @@ namespace osu.Game.Rulesets.UI
 
         private readonly Container<SkinnableSound> hitSounds;
 
+        private HitObjectLifetimeEntry? mostValidObject;
+
+        [Resolved]
+        private IGameplayClock? gameplayClock { get; set; }
+
         public GameplaySampleTriggerSource(HitObjectContainer hitObjectContainer)
         {
             this.hitObjectContainer = hitObjectContainer;
@@ -38,59 +45,85 @@ namespace osu.Game.Rulesets.UI
             };
         }
 
-        private HitObjectLifetimeEntry fallbackObject;
-
         /// <summary>
         /// Play the most appropriate hit sound for the current point in time.
         /// </summary>
         public virtual void Play()
         {
-            var nextObject = GetMostValidObject();
+            HitObject? nextObject = GetMostValidObject();
 
             if (nextObject == null)
                 return;
 
             var samples = nextObject.Samples
-                                    .Select(s => nextObject.SampleControlPoint.ApplyTo(s))
                                     .Cast<ISampleInfo>()
                                     .ToArray();
 
             PlaySamples(samples);
         }
 
-        protected void PlaySamples(ISampleInfo[] samples) => Schedule(() =>
+        protected virtual void PlaySamples(ISampleInfo[] samples) => Schedule(() =>
         {
             var hitSound = getNextSample();
             hitSound.Samples = samples;
             hitSound.Play();
         });
 
-        protected HitObject GetMostValidObject()
+        protected HitObject? GetMostValidObject()
         {
-            // The most optimal lookup case we have is when an object is alive. There are usually very few alive objects so there's no drawbacks in attempting this lookup each time.
-            var hitObject = hitObjectContainer.AliveObjects.FirstOrDefault(h => h.Result?.HasResult != true)?.HitObject;
-
-            // In the case a next object isn't available in drawable form, we need to do a somewhat expensive traversal to get a valid sound to play.
-            if (hitObject == null)
+            if (mostValidObject == null || isAlreadyHit(mostValidObject))
             {
-                // This lookup can be skipped if the last entry is still valid (in the future and not yet hit).
-                if (fallbackObject == null || fallbackObject.Result?.HasResult == true)
+                // We need to use lifetime entries to find the next object (we can't just use `hitObjectContainer.Objects` due to pooling - it may even be empty).
+                // If required, we can make this lookup more efficient by adding support to get next-future-entry in LifetimeEntryManager.
+                var candidate =
+                    // Use alive entries first as an optimisation.
+                    hitObjectContainer.AliveEntries.Select(tuple => tuple.Entry).Where(e => !isAlreadyHit(e)).MinBy(e => e.HitObject.StartTime)
+                    ?? hitObjectContainer.Entries.Where(e => !isAlreadyHit(e)).MinBy(e => e.HitObject.StartTime);
+
+                // In the case there are no non-judged objects, the last hit object should be used instead.
+                if (candidate == null)
                 {
-                    // We need to use lifetime entries to find the next object (we can't just use `hitObjectContainer.Objects` due to pooling - it may even be empty).
-                    // If required, we can make this lookup more efficient by adding support to get next-future-entry in LifetimeEntryManager.
-                    fallbackObject = hitObjectContainer.Entries
-                                                       .Where(e => e.Result?.HasResult != true)
-                                                       .OrderBy(e => e.HitObject.StartTime)
-                                                       .FirstOrDefault();
-
-                    // In the case there are no unjudged objects, the last hit object should be used instead.
-                    fallbackObject ??= hitObjectContainer.Entries.LastOrDefault();
+                    mostValidObject = hitObjectContainer.Entries.LastOrDefault();
                 }
-
-                hitObject = fallbackObject?.HitObject;
+                else
+                {
+                    if (isCloseEnoughToCurrentTime(candidate.HitObject))
+                    {
+                        mostValidObject = candidate;
+                    }
+                    else
+                    {
+                        mostValidObject ??= hitObjectContainer.Entries.FirstOrDefault();
+                    }
+                }
             }
 
-            return hitObject;
+            if (mostValidObject == null)
+                return null;
+
+            // If the fallback has been judged then we want the sample from the object itself.
+            if (isAlreadyHit(mostValidObject))
+                return mostValidObject.HitObject;
+
+            // Else we want the earliest valid nested.
+            // In cases of nested objects, they will always have earlier sample data than their parent object.
+            return getAllNested(mostValidObject.HitObject).OrderBy(h => h.GetEndTime()).SkipWhile(h => h.GetEndTime() <= getReferenceTime()).FirstOrDefault() ?? mostValidObject.HitObject;
+        }
+
+        private bool isAlreadyHit(HitObjectLifetimeEntry h) => h.Result?.HasResult == true;
+        private bool isCloseEnoughToCurrentTime(HitObject h) => getReferenceTime() >= h.StartTime - h.HitWindows.WindowFor(HitResult.Miss) * 2;
+
+        private double getReferenceTime() => gameplayClock?.CurrentTime ?? Clock.CurrentTime;
+
+        private IEnumerable<HitObject> getAllNested(HitObject hitObject)
+        {
+            foreach (var h in hitObject.NestedHitObjects)
+            {
+                yield return h;
+
+                foreach (var n in getAllNested(h))
+                    yield return n;
+            }
         }
 
         private SkinnableSound getNextSample()

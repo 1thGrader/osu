@@ -68,9 +68,6 @@ namespace osu.Game.Screens.Select.Leaderboards
         }
 
         [Resolved]
-        private ScoreManager scoreManager { get; set; } = null!;
-
-        [Resolved]
         private IBindable<RulesetInfo> ruleset { get; set; } = null!;
 
         [Resolved]
@@ -104,6 +101,9 @@ namespace osu.Game.Screens.Select.Leaderboards
 
         protected override APIRequest? FetchScores(CancellationToken cancellationToken)
         {
+            scoreRetrievalRequest?.Cancel();
+            scoreRetrievalRequest = null;
+
             var fetchBeatmapInfo = BeatmapInfo;
 
             if (fetchBeatmapInfo == null)
@@ -152,14 +152,21 @@ namespace osu.Game.Screens.Select.Leaderboards
             else if (filterMods)
                 requestMods = mods.Value;
 
-            scoreRetrievalRequest = new GetScoresRequest(fetchBeatmapInfo, fetchRuleset, Scope, requestMods);
+            var newRequest = new GetScoresRequest(fetchBeatmapInfo, fetchRuleset, Scope, requestMods);
+            newRequest.Success += response => Schedule(() =>
+            {
+                // Request may have changed since fetch request.
+                // Can't rely on request cancellation due to Schedule inside SetScores so let's play it safe.
+                if (!newRequest.Equals(scoreRetrievalRequest))
+                    return;
 
-            scoreRetrievalRequest.Success += response => SetScores(
-                scoreManager.OrderByTotalScore(response.Scores.Select(s => s.ToScoreInfo(rulesets, fetchBeatmapInfo))),
-                response.UserScore?.CreateScoreInfo(rulesets, fetchBeatmapInfo)
-            );
+                SetScores(
+                    response.Scores.Select(s => s.ToScoreInfo(rulesets, fetchBeatmapInfo)).OrderByTotalScore(),
+                    response.UserScore?.CreateScoreInfo(rulesets, fetchBeatmapInfo)
+                );
+            });
 
-            return scoreRetrievalRequest;
+            return scoreRetrievalRequest = newRequest;
         }
 
         protected override LeaderboardScore CreateDrawableScore(ScoreInfo model, int index) => new LeaderboardScore(model, index, IsOnlineScope)
@@ -181,6 +188,7 @@ namespace osu.Game.Screens.Select.Leaderboards
 
             scoreSubscription = realm.RegisterForNotifications(r =>
                 r.All<ScoreInfo>().Filter($"{nameof(ScoreInfo.BeatmapInfo)}.{nameof(BeatmapInfo.ID)} == $0"
+                                          + $" AND {nameof(ScoreInfo.BeatmapInfo)}.{nameof(BeatmapInfo.Hash)} == {nameof(ScoreInfo.BeatmapHash)}"
                                           + $" AND {nameof(ScoreInfo.Ruleset)}.{nameof(RulesetInfo.ShortName)} == $1"
                                           + $" AND {nameof(ScoreInfo.DeletePending)} == false"
                     , beatmapInfo.ID, ruleset.Value.ShortName), localScoresChanged);
@@ -211,7 +219,7 @@ namespace osu.Game.Screens.Select.Leaderboards
                     scores = scores.Where(s => selectedMods.SetEquals(s.Mods.Select(m => m.Acronym)));
                 }
 
-                scores = scoreManager.OrderByTotalScore(scores.Detach());
+                scores = scores.Detach().OrderByTotalScore();
 
                 SetScores(scores);
             }

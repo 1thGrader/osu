@@ -9,6 +9,7 @@ using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions;
+using osu.Framework.Extensions.LocalisationExtensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Localisation;
@@ -72,7 +73,7 @@ namespace osu.Game.Screens.Ranking.Expanded
             var topStatistics = new List<StatisticDisplay>
             {
                 new AccuracyStatistic(score.Accuracy),
-                new ComboStatistic(score.MaxCombo, scoreManager.GetMaximumAchievableCombo(score)),
+                new ComboStatistic(score.MaxCombo, score.GetMaximumAchievableCombo()),
                 new PerformanceStatistic(score),
             };
 
@@ -100,23 +101,21 @@ namespace osu.Game.Screens.Ranking.Expanded
                         Direction = FillDirection.Vertical,
                         Children = new Drawable[]
                         {
-                            new OsuSpriteText
+                            new TruncatingSpriteText
                             {
                                 Anchor = Anchor.TopCentre,
                                 Origin = Anchor.TopCentre,
                                 Text = new RomanisableString(metadata.TitleUnicode, metadata.Title),
                                 Font = OsuFont.Torus.With(size: 20, weight: FontWeight.SemiBold),
                                 MaxWidth = ScorePanel.EXPANDED_WIDTH - padding * 2,
-                                Truncate = true,
                             },
-                            new OsuSpriteText
+                            new TruncatingSpriteText
                             {
                                 Anchor = Anchor.TopCentre,
                                 Origin = Anchor.TopCentre,
                                 Text = new RomanisableString(metadata.ArtistUnicode, metadata.Artist),
                                 Font = OsuFont.Torus.With(size: 14, weight: FontWeight.SemiBold),
                                 MaxWidth = ScorePanel.EXPANDED_WIDTH - padding * 2,
-                                Truncate = true,
                             },
                             new Container
                             {
@@ -155,14 +154,13 @@ namespace osu.Game.Screens.Ranking.Expanded
                                 AutoSizeAxes = Axes.Both,
                                 Children = new Drawable[]
                                 {
-                                    new OsuSpriteText
+                                    new TruncatingSpriteText
                                     {
                                         Anchor = Anchor.TopCentre,
                                         Origin = Anchor.TopCentre,
                                         Text = beatmap.DifficultyName,
                                         Font = OsuFont.Torus.With(size: 16, weight: FontWeight.SemiBold),
                                         MaxWidth = ScorePanel.EXPANDED_WIDTH - padding * 2,
-                                        Truncate = true,
                                     },
                                     new OsuTextFlowContainer(s => s.Font = OsuFont.Torus.With(size: 12))
                                     {
@@ -309,7 +307,8 @@ namespace osu.Game.Screens.Ranking.Expanded
 
             private void updateDisplay()
             {
-                Text = prefer24HourTime.Value ? $"Played on {time.ToLocalTime():d MMMM yyyy HH:mm}" : $"Played on {time.ToLocalTime():d MMMM yyyy h:mm tt}";
+                Text = LocalisableString.Format("Played on {0}",
+                    time.ToLocalTime().ToLocalisableString(prefer24HourTime.Value ? @"d MMMM yyyy HH:mm" : @"d MMMM yyyy h:mm tt"));
             }
         }
     }

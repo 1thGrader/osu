@@ -1,8 +1,6 @@
 ﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
-#nullable disable
-
 using System.Linq;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
@@ -50,17 +48,16 @@ namespace osu.Game.Tests.Visual
             {
                 var cursorDisplay = new GlobalCursorDisplay { RelativeSizeAxes = Axes.Both };
 
-                cursorDisplay.Add(new OsuTooltipContainer(cursorDisplay.MenuCursor)
+                cursorDisplay.Add(content = new OsuTooltipContainer(cursorDisplay.MenuCursor)
                 {
                     RelativeSizeAxes = Axes.Both,
-                    Child = mainContent
                 });
 
-                mainContent = cursorDisplay;
+                mainContent.Add(cursorDisplay);
             }
 
             if (CreateNestedActionContainer)
-                mainContent = new GlobalActionContainer(null).WithChild(mainContent);
+                mainContent.Add(new GlobalActionContainer(null));
 
             base.Content.AddRange(new Drawable[]
             {

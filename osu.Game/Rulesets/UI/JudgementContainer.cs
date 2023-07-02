@@ -1,8 +1,6 @@
 ﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
-#nullable disable
-
 using System;
 using osu.Framework.Graphics.Containers;
 using osu.Game.Rulesets.Judgements;
@@ -14,7 +12,7 @@ namespace osu.Game.Rulesets.UI
     {
         public override void Add(T judgement)
         {
-            if (judgement == null) throw new ArgumentNullException(nameof(judgement));
+            ArgumentNullException.ThrowIfNull(judgement);
 
             // remove any existing judgements for the judged object.
             // this can be the case when rewinding.
